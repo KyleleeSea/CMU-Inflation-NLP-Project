@@ -183,4 +183,12 @@ complete <- na.omit(joined)
 write.csv(complete, file="marketVarsJoinedWithThetas.csv",
 col.names = TRUE, row.names = TRUE, append = FALSE)
 ```
+^ This file will be used for linear regression, not the STM.
 
+Merging KWICs and Market Data for STM:
+```{r}
+joined_kwics = market_data %>% left_join(dataFull, by=c("transcriptid"))
+complete_kwics <- na.omit(joined_kwics)
+write.csv(complete_kwics, file="marketVarsJoinedWith35KWIC.csv",
+col.names = TRUE, row.names = TRUE, append = FALSE)
+```
