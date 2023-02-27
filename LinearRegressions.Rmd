@@ -1,0 +1,25 @@
+---
+title: "Linear Regressions"
+output: html_notebook
+---
+Packages
+```{r}
+require(readtext)
+require(fixest)
+```
+
+Load data
+```{r}
+df <- read.csv("[Data Directory]/marketVarsJoinedWithThetas.csv")
+```
+
+(Ran into issues with appending different feol results into one dataframe, so ended up manually copy-pasting results for each V1 thru V20)
+(Change V1 in abs_abret_1d ~ abs_abret_1d_lag + V1 and abret_1d ~ abret_1d_lag + V1 to V2, V3, V4, etc)
+Regressions
+```{r}
+reg_abs <- feols(abs_abret_1d ~ abs_abret_1d_lag + V1 | ind_12, data = df)
+summary(reg_abs)
+
+reg_nonabs <- feols(abret_1d ~ abret_1d_lag + V1 | ind_12, data = df)
+summary(reg_nonabs)
+```

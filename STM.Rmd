@@ -1,0 +1,88 @@
+---
+title: "STM"
+output: html_notebook
+---
+Following tutorial: https://burtmonroe.github.io/TextAsDataCourse/Tutorials/IntroSTM.nb.html
+Imports
+
+```{r}
+require(stm)
+require(lda)
+require(quanteda)
+require(slam)
+require(dplyr)
+```
+
+Read data
+```{r}
+dataFull <- read.csv("[Data Directory]/marketVarsJoinedWith35KWIC.csv")
+```
+
+Get metadata
+Can change 'abs_abret_1d' to 'abret_1d'
+```{r}
+metadata <- dataFull['abs_abret_1d'];
+```
+
+
+STM Preprocessing
+```{r}
+set.seed(15)
+data.proc <- textProcessor(documents=dataFull$Concatenated,
+                           metadata=metadata,
+                                 lowercase = TRUE, #*
+                                 removestopwords = TRUE, #*
+                                 removenumbers = TRUE, #*
+                                 removepunctuation = TRUE, #*
+                                 stem = TRUE, #*
+                                 wordLengths = c(3,Inf), #*
+                                 sparselevel = 1, #*
+                                 language = "en", #*
+                                 verbose = TRUE, #*
+                                 onlycharacter = TRUE, # not def
+                                 striphtml = FALSE, #*
+                                 customstopwords = NULL, #*
+                                 v1 = FALSE) #*
+```
+
+```{r}
+set.seed(15)
+data.out <- prepDocuments(data.proc$documents, data.proc$vocab, data.proc$meta, lower.thresh=50)
+```
+
+Topic model
+```{r}
+set.seed(15)
+data.fit.abs_abret_1d <- stm(documents = data.out$documents, 
+                     vocab = data.out$vocab,
+                     K = 20,
+                     prevalence = ~abs_abret_1d,
+                     max.em.its = 75,
+                     data = data.out$meta,
+                     init.type = "Spectral",
+                     verbose=FALSE)
+```
+
+```{r}
+set.seed(15)
+labelTopics(data.fit.abs_abret_1d)
+```
+
+Get examples
+```{r}
+setseed(20)
+findThoughts(data.fit.abret_1d,texts = dataFull$Concatenated, n = 15, topics = c(4))
+```
+
+Estimate Effects
+```{r}
+set.seed(15)
+estEffabsabret_1d <- estimateEffect(1:20 ~ abs_abret_1d, data.fit.abs_abret_1d, meta = data.out$meta, uncertainty = "Global")
+summary(estEffabsabret_1d)
+```
+
+Exploring topic distribution
+```{r}
+plot(data.fit.abs_abret_1d)
+```
+

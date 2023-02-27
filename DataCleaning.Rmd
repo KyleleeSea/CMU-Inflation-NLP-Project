@@ -1,0 +1,186 @@
+---
+title: "Data Cleaning & Exploration - Inflation NLP Research"
+output: html_notebook
+---
+Note: Pipeline designed to save data cleaned intermittently for each step
+Imports
+```{r}
+require(quanteda)
+require(readtext)
+require(glue)
+require(xlsx)
+require(stm)
+require(lda)
+require(slam)
+require(dplyr) 
+```
+
+Set Working Directory
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+# To avoid long save paths
+opts_knit$set(root.dir = "[Data Directory]")
+```
+
+Create KWIC & link to transcript ID
+```{r}
+file_list <- list.files(path = "[Data Directory]", pattern = "*.tsv")
+for (i in seq_along(file_list)) {
+  # Read files 
+  filename <- file_list[[i]]
+  call_data <- readtext(glue("[Data Directory]/{filename}"))
+  
+  # Convert to corpus & Tokenize
+  call_corp <- corpus(call_data, text_field = "componenttext")
+  toks <- tokens(call_corp)
+  
+  # Kwic
+  kw_inflation <- kwic(toks, pattern="inflation*", window=35)
+  
+  # TRANSCRIPT ID
+    # Create empty list
+  newcol = list()
+
+    # Populate list w/sequential transcript ids
+  for (val in 1:length(kw_inflation$docname)) {
+    data = call_data[call_data$doc_id == kw_inflation$docname[val],]
+    newcol <- append(newcol, data$transcriptid)
+  }
+
+    # Vectorize list
+  id <- c(unlist(newcol))
+
+    # Add list to dataframe
+  kw_inflation <- cbind(kw_inflation, id)
+  
+  # Format
+  kw_inflation$Concatenated <- paste(kw_inflation$pre, kw_inflation$keyword, kw_inflation$post)
+  kw_inflation[,c("pre", "post", "keyword","pattern")] <- list(NULL)
+
+  # Save
+  save_name <- tools::file_path_sans_ext(filename)
+  write.csv(kw_inflation, file=glue("{save_name}_kwic.csv"), col.names = TRUE, append = FALSE)
+}
+```
+Merge into one CSV
+Note: Manually create new folder called "processed" in data and move newly created KWIC csvs in that folder
+```{r}
+file_list <- list.files(path = "[Data Directory]/processed", pattern = "*csv")
+fullFrame <- data.frame()
+
+for (i in seq_along(file_list)) {
+  # Read files 
+  filename <- file_list[[i]]
+  print(filename)
+  call_data <- read.csv(glue("[Data Directory]/processed/{filename}"))
+  # Add to running total frame
+  fullFrame <- rbind(fullFrame, call_data)
+}
+# Save
+write.csv(fullFrame, file="kwic35_wID.csv",
+row.names = TRUE, append = FALSE)
+```
+
+Extract mean thetas
+```{r}
+dataFull <- read.csv("[Data Directory]/kwic35_wID.csv")
+
+id_data <- dataFull %>% select(id)
+set.seed(15)
+data.proc <- textProcessor(documents=dataFull$Concatenated,
+                                 metadata = id_data,
+                                 lowercase = TRUE, #*
+                                 removestopwords = TRUE, #*
+                                 removenumbers = TRUE, #*
+                                 removepunctuation = TRUE, #*
+                                 stem = TRUE, #*
+                                 wordLengths = c(3,Inf), #*
+                                 sparselevel = 1, #*
+                                 language = "en", #*
+                                 verbose = TRUE, #*
+                                 onlycharacter = TRUE, # not def
+                                 striphtml = FALSE, #*
+                                 customstopwords = NULL, #*
+                                 v1 = FALSE) #*
+                                 
+data.out <- prepDocuments(data.proc$documents, data.proc$vocab, data.proc$meta, lower.thresh=50)
+
+data.fit.nometa <- stm(documents = data.out$documents, 
+                     vocab = data.out$vocab,
+                     K = 20,
+                     max.em.its = 75,
+                     data = data.out$meta,
+                     init.type = "Spectral")
+
+theta_scores <- data.fit.nometa$theta %>% as.data.frame()
+
+# Associate transcript_id with theta_scores dataframe
+theta_scores$transcriptid <- data.out$meta$id
+
+# Set topic percentages to mean values
+theta_scores <- theta_scores %>%
+  group_by(transcriptid) %>%
+  mutate(V1 = mean(V1)) %>%
+  mutate(V2 = mean(V2)) %>%
+  mutate(V3 = mean(V3)) %>%
+  mutate(V4 = mean(V4)) %>%
+  mutate(V5 = mean(V5)) %>%
+  mutate(V6 = mean(V6)) %>%
+  mutate(V7 = mean(V7)) %>%
+  mutate(V8 = mean(V8)) %>%
+  mutate(V9 = mean(V9)) %>%
+  mutate(V10 = mean(V10)) %>%
+  mutate(V11 = mean(V11)) %>%
+  mutate(V12 = mean(V12)) %>%
+  mutate(V13 = mean(V13)) %>%
+  mutate(V14 = mean(V14)) %>%
+  mutate(V15 = mean(V15)) %>%
+  mutate(V16 = mean(V16)) %>%
+  mutate(V17 = mean(V17)) %>%
+  mutate(V18 = mean(V18)) %>%
+  mutate(V19 = mean(V19)) %>%
+  mutate(V20 = mean(V20))
+
+# Drop duplicates
+theta_scores <- theta_scores[!duplicated(theta_scores), ]
+
+write.csv(theta_scores, file="theta_scores.csv",
+col.names = TRUE, row.names = TRUE, append = FALSE)
+
+View(theta_scores)
+
+```
+
+Label Topics
+```{r}
+labelTopics(data.fit.nometa)
+```
+Get examples (manually change topics = c(20) from 1 to 20)
+```{r}
+findThoughts(data.fit.nometa,texts = dataFull$Concatenated, n = 15, topics = c(20))
+```
+
+
+Join with market data
+1. Read data
+```{r}
+market_data <- read.csv("[Data Directory]/market_vars.csv")
+thetas <- read.csv("[Data Directory]/theta_scores.csv")
+```
+
+2. Join
+```{r}
+joined = market_data %>% left_join(thetas, by=c("transcriptid"))
+```
+
+3. Drop null
+```{r}
+complete <- na.omit(joined)
+```
+
+4.Save as CSV
+```{r}
+write.csv(complete, file="marketVarsJoinedWithThetas.csv",
+col.names = TRUE, row.names = TRUE, append = FALSE)
+```
+
